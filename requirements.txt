@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+langchain
+langchain-openai
+langchain-community
+duckduckgo-search
+numexpr
+python-dotenv
+pydantic>=2.0
+sse-starlette
