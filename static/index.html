@@ -244,7 +244,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 <script>
   const chat     = document.getElementById('chat-container');
   const form     = document.getElementById('input-form');
@@ -331,17 +330,20 @@
   }
 
   function renderMath(element) {
-    if (typeof renderMathInElement !== 'undefined') {
-      renderMathInElement(element, {
-        delimiters: [
-          { left: '$$',  right: '$$',  display: true  },
-          { left: '\\[', right: '\\]', display: true  },
-          { left: '\\(', right: '\\)', display: false },
-          { left: '$',   right: '$',   display: false },
-        ],
-        throwOnError: false,
-      });
-    }
+    if (typeof katex === 'undefined') return;
+
+    const render = (tex, display) => {
+      // Unescape HTML entities that formatMessage may have introduced
+      const clean = tex.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+      try { return katex.renderToString(clean.trim(), { displayMode: display, throwOnError: false }); }
+      catch { return tex; }
+    };
+
+    let html = element.innerHTML;
+    html = html.replace(/\\\[([\s\S]+?)\\\]/g,  (_, t) => render(t, true));
+    html = html.replace(/\$\$([\s\S]+?)\$\$/g,  (_, t) => render(t, true));
+    html = html.replace(/\\\(([\s\S]+?)\\\)/g,  (_, t) => render(t, false));
+    element.innerHTML = html;
   }
 
   function setStreaming(active) {
