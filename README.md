@@ -56,6 +56,7 @@ Adding a new tool requires no routing code changes — just a new `@tool` functi
 | API        | FastAPI                  | Async-native, auto-docs at `/docs`, first-class Pydantic integration|
 | Streaming  | SSE                      | Real-time token delivery, standard protocol, works with plain curl  |
 | Frontend   | HTML/CSS/JS (single file)| Zero dependencies, no build step, served directly by FastAPI        |
+| Math Rendering | KaTeX                | Lightweight LaTeX rendering, no build step                          |
 
 ---
 
@@ -149,6 +150,7 @@ Sage includes a built-in chat interface. After starting the server, open your br
 The interface connects directly to the SSE streaming endpoint and shows:
 - Real-time streaming responses
 - Tool usage indicators for each message (🧮 Calculator, 🔍 Web Search, or 💬 Direct Response)
+- Math expressions rendered with KaTeX (LaTeX notation displays as formatted equations)
 - No build step required — pure HTML/CSS/JS served by FastAPI
 
 ---
@@ -193,7 +195,10 @@ The `/chat` interaction is unidirectional: the client sends one message and rece
 **4. Structured SSE events with metadata**
 Each SSE frame carries a `ChatEvent` JSON payload that includes `tool_used` and `finish_reason` — not just raw text. This gives clients full observability: they know when a tool was used, which one, and why the stream ended, without parsing the text content.
 
-**5. System prompt routing over code-level routing**
+**5. KaTeX for math rendering**
+GPT-4o-mini outputs LaTeX notation by default. Instead of stripping it, we render it properly using KaTeX — turning raw `\(E=mc^2\)` into beautiful formatted equations. Lightweight (CDN), no build step, and degrades gracefully if a LaTeX expression is malformed (`throwOnError: false` shows the raw text instead of crashing).
+
+**6. System prompt routing over code-level routing**
 Tool selection is entirely driven by the LLM reading its system prompt and tool descriptions — there are no `if/elif` routing blocks in the code. This scales linearly: adding a third tool means writing one `@tool` function and one description. The routing logic lives in the prompt, where it belongs.
 
 ---

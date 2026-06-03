@@ -6,6 +6,9 @@
   <title>Sage — AI Assistant</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -196,6 +199,19 @@
 
     #send-btn svg { pointer-events: none; }
 
+    /* ── Math & formatting ── */
+    .katex { font-size: 1.05em; }
+
+    .sage-message code {
+      background: rgba(0,0,0,.06);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    }
+
+    .sage-message strong { font-weight: 600; }
+
     /* ── Responsive ── */
     @media (max-width: 480px) {
       .message-row { max-width: 92%; }
@@ -274,7 +290,7 @@
     row.className = 'message-row sage';
 
     const bubble = document.createElement('div');
-    bubble.className = 'bubble';
+    bubble.className = 'bubble sage-message';
 
     const typing = document.createElement('div');
     typing.className = 'typing';
@@ -305,6 +321,29 @@
     row.appendChild(badge);
   }
 
+  function formatMessage(text) {
+    // Escape HTML before applying any transformations to prevent XSS
+    text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+    text = text.replace(/\n/g, '<br>');
+    return text;
+  }
+
+  function renderMath(element) {
+    if (typeof renderMathInElement !== 'undefined') {
+      renderMathInElement(element, {
+        delimiters: [
+          { left: '$$',  right: '$$',  display: true  },
+          { left: '\\[', right: '\\]', display: true  },
+          { left: '\\(', right: '\\)', display: false },
+          { left: '$',   right: '$',   display: false },
+        ],
+        throwOnError: false,
+      });
+    }
+  }
+
   function setStreaming(active) {
     sendBtn.disabled = active;
     input.disabled   = active;
@@ -327,7 +366,8 @@
     const { row, bubble, typing } = addSageMessage();
 
     let firstToken = true;
-    let textNode = null;
+    let rawText   = '';
+    let textNode  = null;
 
     try {
       const response = await fetch('/chat', {
@@ -380,14 +420,19 @@
               bubble.appendChild(textNode);
               firstToken = false;
             }
+            rawText += payload.content;
             textNode.textContent += payload.content;
             if (isAtBottom()) scrollToBottom();
 
           } else if (eventType === 'done') {
             if (firstToken) {
-              // No tokens were received — clear typing indicator
               typing.remove();
               firstToken = false;
+            }
+            // Replace raw text with formatted HTML, then render math
+            if (rawText) {
+              bubble.innerHTML = formatMessage(rawText);
+              renderMath(bubble);
             }
             applyBadge(row, payload.tool_used ?? null);
             scrollToBottom();
