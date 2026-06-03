@@ -20,7 +20,9 @@ The core design challenge is routing accuracy: making the agent reach for a tool
 ## How It Works — Decision Logic
 
 ```
-User Question
+Browser (Chat UI)
+     | POST /chat
+FastAPI (SSE Streaming)
      |
 LangChain Agent (GPT-4o-mini)
      | analyzes intent
@@ -28,7 +30,7 @@ LangChain Agent (GPT-4o-mini)
      |-- Mathematical      --> Calculator tool (numexpr)
      |-- Current/real-time --> Web Search (DuckDuckGo)
      |
-SSE Streaming Response
+SSE Stream --> UI renders tokens in real-time
 ```
 
 The agent uses a ReAct (Reason + Act) loop. On each turn it produces a `Thought`, decides on an `Action`, observes the result, and iterates until it produces a `Final Answer`. This loop is capped at 3 iterations to prevent runaway execution.
@@ -45,14 +47,15 @@ Adding a new tool requires no routing code changes — just a new `@tool` functi
 
 ## Tech Stack
 
-| Component  | Technology        | Why                                                                 |
-|------------|-------------------|---------------------------------------------------------------------|
-| LLM        | GPT-4o-mini       | Cost-effective, fast, strong tool-calling and instruction-following |
-| Framework  | LangChain         | Industry-standard agent orchestration with ReAct support            |
-| Calculator | numexpr           | Safe math evaluation — no `eval()`, sandboxed to numeric ops only  |
-| Web Search | DuckDuckGo        | No API key required, zero setup friction for evaluators             |
-| API        | FastAPI           | Async-native, auto-docs at `/docs`, first-class Pydantic integration|
-| Streaming  | SSE               | Real-time token delivery, standard protocol, works with plain curl  |
+| Component  | Technology               | Why                                                                 |
+|------------|--------------------------|---------------------------------------------------------------------|
+| LLM        | GPT-4o-mini              | Cost-effective, fast, strong tool-calling and instruction-following |
+| Framework  | LangChain                | Industry-standard agent orchestration with ReAct support            |
+| Calculator | numexpr                  | Safe math evaluation — no `eval()`, sandboxed to numeric ops only  |
+| Web Search | DuckDuckGo               | No API key required, zero setup friction for evaluators             |
+| API        | FastAPI                  | Async-native, auto-docs at `/docs`, first-class Pydantic integration|
+| Streaming  | SSE                      | Real-time token delivery, standard protocol, works with plain curl  |
+| Frontend   | HTML/CSS/JS (single file)| Zero dependencies, no build step, served directly by FastAPI        |
 
 ---
 
@@ -84,8 +87,8 @@ cp .env.example .env
 
 ```bash
 python -m app.main
-# Server starts at http://localhost:8000
-# Interactive API docs at http://localhost:8000/docs
+# Chat interface at http://localhost:8000
+# API docs at http://localhost:8000/docs
 ```
 
 ---
@@ -137,6 +140,19 @@ curl http://localhost:8000/tools
 
 ---
 
+## Chat Interface
+
+Sage includes a built-in chat interface. After starting the server, open your browser at:
+
+**http://localhost:8000**
+
+The interface connects directly to the SSE streaming endpoint and shows:
+- Real-time streaming responses
+- Tool usage indicators for each message (🧮 Calculator, 🔍 Web Search, or 💬 Direct Response)
+- No build step required — pure HTML/CSS/JS served by FastAPI
+
+---
+
 ## Architecture
 
 ```
@@ -147,6 +163,8 @@ sage/
 │   ├── tools.py      # Tool definitions: calculator (numexpr) + DuckDuckGo search
 │   ├── agent.py      # LangChain ReAct agent, system prompt, streaming generator
 │   └── main.py       # FastAPI app: endpoints, SSE streaming, error handlers
+├── static/
+│   └── index.html    # Self-contained chat interface (HTML/CSS/JS) consuming the SSE streaming endpoint
 ├── .env.example
 ├── requirements.txt
 └── README.md
@@ -155,8 +173,9 @@ sage/
 - **`config.py`** — Loads `.env`, validates `OPENAI_API_KEY` at startup (fails fast), configures logging format and level, exposes constants.
 - **`schemas.py`** — All Pydantic v2 models including `ChatEvent` (the SSE payload), `ChatRequest` (with whitespace-stripping validator), and error/health/tools response types.
 - **`tools.py`** — `@tool`-decorated functions. The calculator uses `numexpr.evaluate()` for safe math. The web search wraps `DuckDuckGoSearchRun` with error handling. `get_tools()` and `get_tools_info()` are the only public exports.
-- **`agent.py`** — Builds the `AgentExecutor` with `create_react_agent`, the system prompt, temperature=0, and `max_iterations=3`. `run_agent_stream()` is an async generator that yields `(event_type, content, tool_used)` tuples consumed by the SSE endpoint.
-- **`main.py`** — Three endpoints (`/chat`, `/health`, `/tools`), CORS middleware, startup logging, and exception handlers for validation errors, HTTP errors, and unhandled exceptions.
+- **`agent.py`** — Builds the LangGraph ReAct agent with `create_react_agent`, the system prompt, temperature=0. `run_agent_stream()` is an async generator that yields `(event_type, content, tool_used)` tuples consumed by the SSE endpoint.
+- **`main.py`** — Four endpoints (`/`, `/chat`, `/health`, `/tools`), CORS middleware, startup logging, static file serving, and exception handlers for validation errors, HTTP errors, and unhandled exceptions.
+- **`static/index.html`** — Self-contained chat interface that reads the SSE stream with the Fetch API, renders tokens in real time, and displays a tool badge after each response.
 
 ---
 
@@ -186,7 +205,7 @@ Tool selection is entirely driven by the LLM reading its system prompt and tool 
 - **Conversation memory**: `ConversationBufferWindowMemory` for multi-turn context within a session — so Sage can answer follow-up questions that reference previous turns.
 - **Observability with LangSmith**: Trace every agent run — which tools were considered, which were invoked, token counts, and latency per step. Essential for debugging routing failures in production.
 - **Rate limiting**: Per-IP throttling on `/chat` to prevent API key abuse, using a library like `slowapi`.
-- **Frontend**: A Streamlit or lightweight React interface for a visual demo that shows the streaming response and the tool routing decision in real time.
+- **Enhanced frontend**: Migrate to React + TypeScript for component architecture, conversation history persistence, and theme switching.
 - **Additional tools**: The architecture supports adding tools without touching routing logic. Natural next candidates: a URL reader/summarizer, a translation tool, and a code execution sandbox.
 
 ---

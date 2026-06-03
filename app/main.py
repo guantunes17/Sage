@@ -1,11 +1,15 @@
 import logging
 import traceback
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.responses import FileResponse
+from starlette.staticfiles import StaticFiles
 
 from app.agent import run_agent_stream
 from app.config import APP_NAME, APP_VERSION
@@ -21,10 +25,19 @@ from app.tools import get_tools_info
 
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    tool_names = [t["name"] for t in get_tools_info()]
+    logger.info("%s is ready. Available tools: %s", APP_NAME, tool_names)
+    yield
+
+
 app = FastAPI(
     title="Sage",
     description="AI Assistant with Tool Calling",
     version=APP_VERSION,
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -33,13 +46,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-async def startup_event():
-    tools = get_tools_info()
-    tool_names = [t["name"] for t in tools]
-    logger.info("%s is ready. Available tools: %s", APP_NAME, tool_names)
 
 
 @app.post("/chat")
@@ -118,6 +124,14 @@ async def generic_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content=ErrorResponse(error="Internal server error").model_dump(),
     )
+
+
+@app.get("/")
+async def root():
+    return FileResponse("static/index.html")
+
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 if __name__ == "__main__":

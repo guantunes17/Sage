@@ -3,7 +3,7 @@ uvicorn[standard]
 langchain
 langchain-openai
 langchain-community
-duckduckgo-search
+ddgs
 numexpr
 python-dotenv
 pydantic>=2.0
